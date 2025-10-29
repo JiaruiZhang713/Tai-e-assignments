@@ -25,21 +25,11 @@ package pascal.taie.analysis.dataflow.analysis.constprop;
 import pascal.taie.analysis.dataflow.analysis.AbstractDataflowAnalysis;
 import pascal.taie.analysis.graph.cfg.CFG;
 import pascal.taie.config.AnalysisConfig;
-import pascal.taie.ir.IR;
-import pascal.taie.ir.exp.ArithmeticExp;
-import pascal.taie.ir.exp.BinaryExp;
-import pascal.taie.ir.exp.BitwiseExp;
-import pascal.taie.ir.exp.ConditionExp;
-import pascal.taie.ir.exp.Exp;
-import pascal.taie.ir.exp.IntLiteral;
-import pascal.taie.ir.exp.ShiftExp;
-import pascal.taie.ir.exp.Var;
+import pascal.taie.ir.exp.*;
 import pascal.taie.ir.stmt.DefinitionStmt;
 import pascal.taie.ir.stmt.Stmt;
 import pascal.taie.language.type.PrimitiveType;
 import pascal.taie.language.type.Type;
-import pascal.taie.util.AnalysisException;
-import ppg.parse.Constant;
 
 import java.util.Objects;
 
@@ -61,9 +51,9 @@ public class ConstantPropagation extends
     public CPFact newBoundaryFact(CFG<Stmt> cfg) {
         // TODO - finish me
         CPFact cpfact = new CPFact();
-        for (Var var : cfg.getIR().getVars()){
-            if (canHoldInt(var)){
-                cpfact.update(var, Value.getNAC());
+        for (Var params : cfg.getIR().getParams()) {
+            if (canHoldInt(params)){
+                cpfact.update(params, Value.getNAC());
             }
         }
         return cpfact;
@@ -105,14 +95,7 @@ public class ConstantPropagation extends
         else
             return Value.getNAC();
     }
-//transferNode ：负责实现控制流图中结点的 transfer function 。如果 OUT 改变，返回 true ；否则返回 false 。
-//stmt 表示结点中的一条中间表示，一个结点只有一个中间表示。
-//
-//题目要求只需要对赋值语句处理，所以用 DefinitionStmt 类型过滤。
-//
-//对于所有赋值语句，只考虑具有左值，并且左值是变量且类型可以转换成 int 的语句。这些语句的右值是一个表达式，可能是常量，也能是变量、二元表达式。这个右值表达式的值将通过 evaluate 函数计算。
-//
-//对于其他类型的语句，不做处理，out 直接复制 in 即可，相当于经过一个恒等函数。
+
     @Override
     public boolean transferNode(Stmt stmt, CPFact in, CPFact out) {
         // TODO - finish me
@@ -168,26 +151,45 @@ public class ConstantPropagation extends
             }
             else if (v1.isNAC() || v2.isNAC()) {
                 if (v1.isNAC() && exp instanceof ArithmeticExp &&
-                        ((ArithmeticExp) exp).getOperator() == ArithmeticExp.Op.DIV) {}
+                        (((ArithmeticExp) exp).getOperator() == ArithmeticExp.Op.DIV || ((ArithmeticExp) exp).getOperator() == ArithmeticExp.Op.REM)) {
+                    return Value.getUndef();
+                }
                 return Value.getNAC();
             }
 
             if (exp instanceof ArithmeticExp) {
-                switch (((ArithmeticExp) exp).getOperator()) {
-                    case ADD:
-                    case SUB:
-                    case MUL:
-                    case DIV:
-                    case REM:
-                }
+                return switch (((ArithmeticExp) exp).getOperator()) {
+                    case ADD -> Value.makeConstant(v1.getConstant() + v2.getConstant());
+                    case SUB -> Value.makeConstant(v1.getConstant() - v2.getConstant());
+                    case MUL -> Value.makeConstant(v1.getConstant() * v2.getConstant());
+                    case DIV -> Value.makeConstant(v1.getConstant() / v2.getConstant());
+                    case REM -> Value.makeConstant(v1.getConstant() % v2.getConstant());
+                };
             }
             else if (exp instanceof ConditionExp) {
-
+                return switch (((ConditionExp) exp).getOperator()) {
+                    case EQ -> Value.makeConstant(v1.getConstant() == v2.getConstant() ? 1 : 0);
+                    case NE -> Value.makeConstant(v1.getConstant() != v2.getConstant() ? 1 : 0);
+                    case LT -> Value.makeConstant(v1.getConstant() < v2.getConstant() ? 1 : 0);
+                    case GT -> Value.makeConstant(v1.getConstant() > v2.getConstant() ? 1 : 0);
+                    case LE -> Value.makeConstant(v1.getConstant() <= v2.getConstant() ? 1 : 0);
+                    case GE -> Value.makeConstant(v1.getConstant() >= v2.getConstant() ? 1 : 0);
+                };
             }
             else if  (exp instanceof BitwiseExp) {
-
+                return switch (((BitwiseExp) exp).getOperator()) {
+                    case OR -> Value.makeConstant(v1.getConstant() | v2.getConstant());
+                    case AND -> Value.makeConstant(v1.getConstant() & v2.getConstant());
+                    case XOR -> Value.makeConstant(v1.getConstant() ^ v2.getConstant());
+                };
             }
-
+            else if  (exp instanceof ShiftExp) {
+                return switch (((ShiftExp) exp).getOperator()) {
+                    case SHL -> Value.makeConstant(v1.getConstant() << v2.getConstant());
+                    case SHR -> Value.makeConstant(v1.getConstant() >> v2.getConstant());
+                    case USHR -> Value.makeConstant(v1.getConstant() >>> v2.getConstant());
+                };
+            }
         }
         return Value.getNAC();
     }
