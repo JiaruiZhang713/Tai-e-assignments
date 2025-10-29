@@ -51,9 +51,9 @@ public class ConstantPropagation extends
     public CPFact newBoundaryFact(CFG<Stmt> cfg) {
         // TODO - finish me
         CPFact cpfact = new CPFact();
-        for (Var params : cfg.getIR().getParams()) {
-            if (canHoldInt(params)){
-                cpfact.update(params, Value.getNAC());
+        for (Var param : cfg.getIR().getParams()) {
+            if (canHoldInt(param)){
+                cpfact.update(param, Value.getNAC());
             }
         }
         return cpfact;
@@ -89,7 +89,7 @@ public class ConstantPropagation extends
         else if (v2.isUndef()) {
             return v1;
         }
-        else if (v1.getConstant() == v2.getConstant()) {
+        else if (v1.isConstant() && v2.isConstant() && v1.getConstant() == v2.getConstant()) {
             return v1;
         }
         else
@@ -146,16 +146,18 @@ public class ConstantPropagation extends
             Var o2 = ((BinaryExp) exp).getOperand2();
             Value v1 = in.get(o1);
             Value v2 = in.get(o2);
+
             if (v1.isUndef() || v2.isUndef()) {
                 return Value.getUndef();
             }
-            else if (v1.isNAC() || v2.isNAC()) {
-                if (v1.isNAC() && exp instanceof ArithmeticExp &&
-                        (((ArithmeticExp) exp).getOperator() == ArithmeticExp.Op.DIV || ((ArithmeticExp) exp).getOperator() == ArithmeticExp.Op.REM)) {
-                    return Value.getUndef();
-                }
+            else if (v2.isConstant() && v2.getConstant() == 0 && exp instanceof ArithmeticExp &&
+                    (((ArithmeticExp) exp).getOperator() == ArithmeticExp.Op.DIV || ((ArithmeticExp) exp).getOperator() == ArithmeticExp.Op.REM)){
+                return Value.getUndef();
+            }
+            if (v1.isNAC() || v2.isNAC()) {
                 return Value.getNAC();
             }
+
 
             if (exp instanceof ArithmeticExp) {
                 return switch (((ArithmeticExp) exp).getOperator()) {
