@@ -33,21 +33,13 @@ import pascal.taie.analysis.graph.cfg.CFGBuilder;
 import pascal.taie.analysis.graph.cfg.Edge;
 import pascal.taie.config.AnalysisConfig;
 import pascal.taie.ir.IR;
-import pascal.taie.ir.exp.ArithmeticExp;
-import pascal.taie.ir.exp.ArrayAccess;
-import pascal.taie.ir.exp.CastExp;
-import pascal.taie.ir.exp.FieldAccess;
-import pascal.taie.ir.exp.NewExp;
-import pascal.taie.ir.exp.RValue;
-import pascal.taie.ir.exp.Var;
+import pascal.taie.ir.exp.*;
 import pascal.taie.ir.stmt.AssignStmt;
 import pascal.taie.ir.stmt.If;
 import pascal.taie.ir.stmt.Stmt;
 import pascal.taie.ir.stmt.SwitchStmt;
 
-import java.util.Comparator;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.*;
 
 public class DeadCodeDetection extends MethodAnalysis {
 
@@ -71,6 +63,104 @@ public class DeadCodeDetection extends MethodAnalysis {
         Set<Stmt> deadCode = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
         // TODO - finish me
         // Your task is to recognize dead code in ir and add it to deadCode
+
+        // 可达Stmt集合reach
+        Set<Stmt> reach = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
+        // 遍历过的Stmt集合checked
+        Set<Stmt> checked = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
+        Queue<Stmt> stmts = new ArrayDeque<>();
+        reach.add(cfg.getEntry());
+        reach.add(cfg.getExit());
+        stmts.add(cfg.getEntry());
+        while (!stmts.isEmpty()) {
+            Stmt stmt = stmts.poll();
+            checked.add(stmt);
+            if (stmt instanceof If){
+                reach.add(stmt);
+                Value condVal = ConstantPropagation.evaluate(((If) stmt).getCondition(), constants.getInFact(stmt));
+                if (condVal.isConstant()){
+                    if (condVal.getConstant() == 1){
+                        // True
+                        for (Edge<Stmt> edge : cfg.getOutEdgesOf(stmt)){
+                            if (edge.getKind() == Edge.Kind.IF_TRUE && !checked.contains(edge.getTarget())){
+                                stmts.add(edge.getTarget());
+                            }
+                        }
+                    }
+                    else {
+                        // False
+                        for (Edge<Stmt> edge : cfg.getOutEdgesOf(stmt)){
+                            if (edge.getKind() == Edge.Kind.IF_FALSE && !checked.contains(edge.getTarget())){
+                                stmts.add(edge.getTarget());
+                            }
+                        }
+                    }
+                }
+                else{
+                    for (Stmt succ : cfg.getSuccsOf(stmt)){
+                        if (!checked.contains(succ)){
+                            stmts.add(succ);
+                        }
+                    }
+                }
+            }
+            else if (stmt instanceof AssignStmt) {
+                reach.add(stmt);
+                LValue lval = ((AssignStmt) stmt).getLValue();
+                RValue rval = ((AssignStmt) stmt).getRValue();
+                boolean dead = lval instanceof Var && !liveVars.getResult(stmt).contains((Var) lval) && hasNoSideEffect(rval);
+                if (dead){
+                    // 添加无用赋值到死代码集合中
+                    deadCode.add((Stmt) stmt);
+                }
+                for (Stmt succ : cfg.getSuccsOf(stmt)){
+                    if (!checked.contains(succ)){
+                        stmts.add(succ);
+                    }
+                }
+            }
+            else if (stmt instanceof SwitchStmt) {
+                reach.add(stmt);
+                Value caseVal = constants.getResult(stmt).get(((SwitchStmt) stmt).getVar());
+                if (caseVal.isConstant()){
+                    int i = ((SwitchStmt) stmt).getCaseValues().indexOf(caseVal.getConstant());
+                    if (i != -1){
+                        for (Edge<Stmt> edge : cfg.getOutEdgesOf(stmt)){
+                            if (edge.getKind() == Edge.Kind.SWITCH_CASE && edge.getCaseValue() == caseVal.getConstant() && !checked.contains(edge.getTarget())){
+                                stmts.add(edge.getTarget());
+                            }
+                        }
+                    }
+                    else {
+                        Stmt dfstmt = ((SwitchStmt) stmt).getDefaultTarget();
+                        if (!checked.contains(dfstmt)){
+                            stmts.add(dfstmt);
+                        }
+                    }
+                }
+                else {
+                    for (Stmt succ : cfg.getSuccsOf(stmt)) {
+                        if (!checked.contains(succ)) {
+                            stmts.add(succ);
+                        }
+                    }
+                }
+            }
+            else {
+                reach.add(stmt);
+                for (Stmt succ : cfg.getSuccsOf(stmt)) {
+                    if (!checked.contains(succ)) {
+                        stmts.add(succ);
+                    }
+                }
+            }
+        }
+        // 添加不可达代码到死代码集合中
+        for (Stmt stmt: ir){
+            if (!reach.contains(stmt)){
+                deadCode.add(stmt);
+            }
+        }
         return deadCode;
     }
 
