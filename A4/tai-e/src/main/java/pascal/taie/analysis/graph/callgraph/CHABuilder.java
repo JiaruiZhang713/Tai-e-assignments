@@ -95,26 +95,22 @@ class CHABuilder implements CGBuilder<Invoke, JMethod> {
                 visit.add(c);
                 while (!subclasses.isEmpty()) {
                     JClass subclass = subclasses.poll();
-                    if (CallGraphs.getCallKind(callSite) == CallKind.INTERFACE){
-                        for (JClass jClass :hierarchy.getDirectImplementorsOf(subclass)) {
-                            if (!visit.contains(jClass)) {
-                                subclasses.add(jClass);
-                                visit.add(jClass);
-                            }
-                        }
-                        for (JClass jClass :hierarchy.getDirectSubinterfacesOf(subclass)) {
-                            if (!visit.contains(jClass)) {
-                                subclasses.add(jClass);
-                                visit.add(jClass);
-                            }
+                    for (JClass jClass : hierarchy.getDirectSubclassesOf(subclass)) {
+                        if (!visit.contains(jClass)) {
+                            subclasses.add(jClass);
+                            visit.add(jClass);
                         }
                     }
-                    else{
-                        for (JClass jClass : hierarchy.getDirectSubclassesOf(subclass)) {
-                            if (!visit.contains(jClass)) {
-                                subclasses.add(jClass);
-                                visit.add(jClass);
-                            }
+                    for (JClass jClass :hierarchy.getDirectSubinterfacesOf(subclass)) {
+                        if (!visit.contains(jClass)) {
+                            subclasses.add(jClass);
+                            visit.add(jClass);
+                        }
+                    }
+                    for (JClass jClass :hierarchy.getDirectImplementorsOf(subclass)) {
+                        if (!visit.contains(jClass)) {
+                            subclasses.add(jClass);
+                            visit.add(jClass);
                         }
                     }
                     T.add(dispatch(subclass, s));
